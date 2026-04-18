@@ -302,6 +302,25 @@
       [12, -12], [-12, 12],
     ];
     for (const [x, z] of spawns) WORLD.spawnPoints.push(V3(x, 0, z));
+    filterSpawnPoints();
+  }
+
+  // Some author-chosen spawns may overlap buildings added later. Throw those
+  // out and backfill with random safe positions so players/bots never spawn
+  // inside a wall (which would block all movement and hitscan).
+  function filterSpawnPoints() {
+    const r = 1.0;
+    const safe = [];
+    for (const p of WORLD.spawnPoints) {
+      if (!collidesCircle(p.x, p.z, r, 1.0)) safe.push(p);
+    }
+    let guard = 0;
+    while (safe.length < 8 && guard++ < 400) {
+      const x = rand(-WORLD.size * 0.8, WORLD.size * 0.8);
+      const z = rand(-WORLD.size * 0.8, WORLD.size * 0.8);
+      if (!collidesCircle(x, z, r, 1.0)) safe.push(V3(x, 0, z));
+    }
+    WORLD.spawnPoints = safe;
   }
 
   // Return true if a horizontal circle (radius r) at (x,z) overlaps any obstacle.
