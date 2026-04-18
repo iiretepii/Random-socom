@@ -477,7 +477,80 @@
       camTarget: V3(0, 1.55, 0),
       recoil: 0,
       footstepT: 0,
+      // Viewmodel animation state (set up in buildViewmodel).
+      viewmodel: null,
+      vmFlash: null,
+      vmRecoil: 0,
+      vmReloadDip: 0,
+      vmBobT: 0,
     };
+
+    buildViewmodel();
+  }
+
+  // First-person viewmodel: arms + rifle attached to the camera so it sits at
+  // the bottom of the screen and always faces the aim direction.
+  function buildViewmodel() {
+    scene.add(camera); // camera must be in the scene graph for children to render
+    const vm = new THREE.Group();
+    camera.add(vm);
+
+    const sleeve = new THREE.MeshStandardMaterial({ color: 0x2a4030, roughness: 0.9 });
+    const glove  = new THREE.MeshStandardMaterial({ color: 0x202020, roughness: 0.85 });
+    const gun    = new THREE.MeshStandardMaterial({ color: 0x17181c, roughness: 0.7, metalness: 0.35 });
+    const gunMag = new THREE.MeshStandardMaterial({ color: 0x1e1e22, roughness: 0.8 });
+
+    // Arms (forearms + gloves), angled inward so the rifle sits centered.
+    const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.42), sleeve);
+    lArm.position.set(-0.16, -0.26, -0.55);
+    lArm.rotation.y = 0.10;
+    vm.add(lArm);
+    const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.42), sleeve);
+    rArm.position.set(0.20, -0.26, -0.55);
+    rArm.rotation.y = -0.08;
+    vm.add(rArm);
+    const lGlove = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), glove);
+    lGlove.position.set(-0.08, -0.28, -0.80);
+    vm.add(lGlove);
+    const rGlove = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), glove);
+    rGlove.position.set( 0.14, -0.28, -0.70);
+    vm.add(rGlove);
+
+    // Rifle parts (receiver, barrel, stock, magazine, optic).
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, 0.32), gun);
+    receiver.position.set(0.06, -0.22, -0.70);
+    vm.add(receiver);
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.40), gun);
+    barrel.position.set(0.06, -0.22, -0.98);
+    vm.add(barrel);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.10, 0.25), gun);
+    stock.position.set(0.06, -0.22, -0.45);
+    vm.add(stock);
+    const magBox = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.10), gunMag);
+    magBox.position.set(0.06, -0.34, -0.68);
+    vm.add(magBox);
+    const optic = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.12), gun);
+    optic.position.set(0.06, -0.13, -0.70);
+    vm.add(optic);
+
+    // Muzzle flash at the end of the barrel.
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe28a, transparent: true, opacity: 0 });
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 6), flashMat);
+    flash.position.set(0.06, -0.22, -1.20);
+    flash.visible = false;
+    vm.add(flash);
+    // A short emissive spike to sell the flash visually.
+    const spikeMat = new THREE.MeshBasicMaterial({ color: 0xffbb44, transparent: true, opacity: 0 });
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.22, 8), spikeMat);
+    spike.rotation.x = -Math.PI / 2;
+    spike.position.set(0.06, -0.22, -1.28);
+    spike.visible = false;
+    vm.add(spike);
+
+    state.player.viewmodel = vm;
+    state.player.vmFlash = flash;
+    state.player.vmFlashSpike = spike;
+    state.player.vmRestPos = V3(0, 0, 0);
   }
 
   function respawnPlayer() {
@@ -632,7 +705,44 @@
     // Fire handled in shooting chunk (next).
     handleFiring(dt);
 
+    updateViewmodel(dt);
     consumeInputFrame();
+  }
+
+  function updateViewmodel(dt) {
+    const p = state.player;
+    const vm = p.viewmodel;
+    if (!vm) return;
+
+    // Decay recoil and reload-dip.
+    p.vmRecoil = Math.max(0, p.vmRecoil - dt * 5.5);
+    const reloadTarget = p.reloading ? 1 : 0;
+    p.vmReloadDip = lerp(p.vmReloadDip, reloadTarget, 1 - Math.pow(0.0015, dt));
+
+    // Movement bob: stronger when sprinting.
+    const moveMag = clamp(Math.hypot(Input.move.x, Input.move.y) +
+      (state.touchMode ? 0 : Math.hypot(...readKeyboardMove())), 0, 1);
+    const bobActive = (moveMag > 0.15 && p.onGround) ? 1 : 0;
+    const bobSpeed = Input.sprint ? 14 : 9;
+    p.vmBobT += dt * bobSpeed * bobActive;
+    const bobX =  Math.sin(p.vmBobT) * 0.018 * bobActive;
+    const bobY = -Math.abs(Math.sin(p.vmBobT)) * 0.024 * bobActive;
+
+    // Aim sway opposite to look deltas for weight.
+    const swayX = clamp(Input.look.x * 0.05 + Input.mouseDX * 0.0012, -0.06, 0.06);
+    const swayY = clamp(Input.look.y * 0.04 + Input.mouseDY * 0.0012, -0.05, 0.05);
+
+    // Apply as offsets relative to rest.
+    vm.position.set(
+      swayX + bobX,
+      bobY - p.vmReloadDip * 0.22,
+      p.vmRecoil * 0.10
+    );
+    vm.rotation.set(
+      swayY * 0.5 - p.vmRecoil * 0.22 + p.vmReloadDip * 0.5,
+      swayX * -0.8 + p.vmReloadDip * 0.4,
+      p.vmReloadDip * -0.35
+    );
   }
 
   // ---------------- Weapons / effects ----------------
@@ -683,11 +793,21 @@
       imp.mesh.scale.setScalar(1 + (1 - k) * 2);
       if (imp.life <= 0) { scene.remove(imp.mesh); imp.mesh.geometry.dispose(); imp.mesh.material.dispose(); state.impacts.splice(i, 1); }
     }
-    // Muzzle flash fade
+    // Muzzle flash fade (viewmodel + any legacy flashes)
     const p = state.player;
-    if (p && p.flash && p.flash.visible) {
-      p.flash.material.opacity -= dt * 22;
-      if (p.flash.material.opacity <= 0) { p.flash.visible = false; p.flash.material.opacity = 0; }
+    if (p) {
+      if (p.flash && p.flash.visible) {
+        p.flash.material.opacity -= dt * 22;
+        if (p.flash.material.opacity <= 0) { p.flash.visible = false; p.flash.material.opacity = 0; }
+      }
+      if (p.vmFlash && p.vmFlash.visible) {
+        p.vmFlash.material.opacity -= dt * 28;
+        if (p.vmFlash.material.opacity <= 0) { p.vmFlash.visible = false; p.vmFlash.material.opacity = 0; }
+      }
+      if (p.vmFlashSpike && p.vmFlashSpike.visible) {
+        p.vmFlashSpike.material.opacity -= dt * 26;
+        if (p.vmFlashSpike.material.opacity <= 0) { p.vmFlashSpike.visible = false; p.vmFlashSpike.material.opacity = 0; }
+      }
     }
     for (const b of state.bots) {
       if (b.flash && b.flash.visible) {
@@ -758,6 +878,11 @@
     const endPt = hit.hit ? hit.point : aim.origin.clone().addScaledVector(dir, 220);
     spawnTracer(muzzle, endPt, 0xfff0b0);
 
+    // Viewmodel kick + muzzle flash.
+    p.vmRecoil = Math.min(1.2, p.vmRecoil + 0.9);
+    if (p.vmFlash) { p.vmFlash.visible = true; p.vmFlash.material.opacity = 1; }
+    if (p.vmFlashSpike) { p.vmFlashSpike.visible = true; p.vmFlashSpike.material.opacity = 0.9; }
+
     if (hit.hit === 'bot') {
       damageBot(hit.target, p.damage, 'you');
       spawnImpact(hit.point, false);
@@ -817,6 +942,13 @@
       eyeY + sp * 10,
       p.pos.z - cy * cp * 10
     );
+
+    // Sprint FOV kick for a sense of speed.
+    const moveMag = Math.hypot(Input.move.x, Input.move.y);
+    const sprintingVisual = Input.sprint && (moveMag > 0.3 || (!state.touchMode && Input.keys['KeyW']));
+    const targetFov = sprintingVisual ? 86 : 72;
+    camera.fov = lerp(camera.fov, targetFov, 1 - Math.pow(0.005, dt));
+    camera.updateProjectionMatrix();
   }
 
   // Replace the stub camera updater above with the first-person one.
