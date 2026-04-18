@@ -445,6 +445,9 @@
     const group = buildOperatorMesh(0x2f5a3a, 0x1a3324);
     group.position.set(0, 0, 0);
     scene.add(group);
+    // First-person: don't render the local operator's body/arms/rifle.
+    // Tracers and muzzle flash come from the camera instead.
+    group.visible = false;
 
     // Muzzle flash (hidden until firing).
     const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0 });
@@ -745,17 +748,15 @@
     dir.normalize();
     const hit = raycastHit(aim.origin, dir, 220);
 
-    // Tracer from the rifle muzzle to the hit point (nicer visuals).
-    const muzzle = playerAim().origin;
+    // Tracer from just below/forward of the camera so it looks like it comes
+    // from the muzzle of a first-person weapon rather than a phantom shoulder.
+    const fwd = aim.dir;
+    const rightX = -Math.cos(p.yaw), rightZ = Math.sin(p.yaw);
+    const muzzle = camera.position.clone()
+      .addScaledVector(fwd, 0.6)
+      .add(V3(rightX * 0.18, -0.18, rightZ * 0.18));
     const endPt = hit.hit ? hit.point : aim.origin.clone().addScaledVector(dir, 220);
     spawnTracer(muzzle, endPt, 0xfff0b0);
-
-    // Muzzle flash on the operator's rifle.
-    if (p.flash) {
-      p.flash.position.set(0.45, 1.38, -0.95); // relative to group, which faces -Z
-      p.flash.material.opacity = 1;
-      p.flash.visible = true;
-    }
 
     if (hit.hit === 'bot') {
       damageBot(hit.target, p.damage, 'you');
@@ -801,45 +802,25 @@
   }
   WORLD.damageBot = damageBot;
 
-  function updateCameraTPS(dt) {
+  function updateCameraFPS(dt) {
     const p = state.player;
     if (!p) return;
-    // Third-person over-the-shoulder camera.
-    const pitch = p.pitch - p.recoil * 0.4;
+    const crouching = Input.crouch;
+    const eyeY = p.pos.y + (crouching ? 1.1 : 1.65);
+    camera.position.set(p.pos.x, eyeY, p.pos.z);
+
+    const pitch = p.pitch - p.recoil * 0.35;
     const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
-    // Local offset behind and slightly right of the player.
-    const lx = 0.9, ly = 1.9, lz = 3.8;
-    const wx = cy * lx + sy * lz;
-    const wz = -sy * lx + cy * lz;
-    let camX = p.pos.x + wx;
-    let camY = p.pos.y + ly + sp * 0.6;
-    let camZ = p.pos.z + wz;
-
-    // Collide camera with geometry so it doesn't phase through walls.
-    const origin = V3(p.pos.x, p.pos.y + 1.55, p.pos.z);
-    const toCam = V3(camX - origin.x, camY - origin.y, camZ - origin.z);
-    const dist = toCam.length();
-    toCam.divideScalar(dist || 1);
-    const hit = raycastHit(origin, toCam, dist);
-    let finalDist = dist;
-    if (hit.hit) finalDist = Math.max(0.8, hit.dist - 0.3);
-    camera.position.set(
-      origin.x + toCam.x * finalDist,
-      origin.y + toCam.y * finalDist,
-      origin.z + toCam.z * finalDist
-    );
-    // Look in aim direction.
-    const lookAt = V3(
+    camera.lookAt(
       p.pos.x - sy * cp * 10,
-      p.pos.y + 1.55 + sp * 10,
+      eyeY + sp * 10,
       p.pos.z - cy * cp * 10
     );
-    camera.lookAt(lookAt);
   }
 
-  // Replace the stub camera updater above.
-  updateCamera = updateCameraTPS;
+  // Replace the stub camera updater above with the first-person one.
+  updateCamera = updateCameraFPS;
   // ---------------- Bots ----------------
   const BOT_NAMES = ['Kilo-1','Kilo-2','Delta-3','Echo-4','Victor-5','Bravo-6','Zulu-7'];
   const BOT_COLORS = [
