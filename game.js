@@ -872,9 +872,17 @@
     }
     if (!spawn) spawn = WORLD.spawnPoints[0] || V3(20, 0, 20);
 
+    // Belt-and-braces: if the chosen spawn overlaps an obstacle, find a clear
+    // spot nearby so the bot doesn't start embedded in a wall.
+    let sx = spawn.x, sz = spawn.z;
+    if (collidesCircle(sx, sz, 0.7, 1.0)) {
+      const free = findFreeSpotNear(sx, sz, 0.7, 1.0);
+      if (free) { sx = free[0]; sz = free[1]; }
+    }
+
     const pair = BOT_COLORS[irand(0, BOT_COLORS.length)];
     const group = buildOperatorMesh(pair[0], pair[1]);
-    group.position.set(spawn.x, 0, spawn.z);
+    group.position.set(sx, 0, sz);
     scene.add(group);
 
     const flashMat = new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0 });
