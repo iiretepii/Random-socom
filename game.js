@@ -336,6 +336,24 @@
   }
   WORLD.collidesCircle = collidesCircle;
 
+  // Search an expanding ring around (x,z) for a spot that doesn't collide.
+  // Used as a last-resort "unstick" for the player or a fresh spawn.
+  function findFreeSpotNear(x, z, r, heightY) {
+    if (!collidesCircle(x, z, r, heightY)) return [x, z];
+    for (let ring = 1; ring <= 12; ring++) {
+      const dist = ring * 0.8;
+      const steps = 8 + ring * 4;
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const tx = x + Math.cos(a) * dist;
+        const tz = z + Math.sin(a) * dist;
+        if (!collidesCircle(tx, tz, r, heightY)) return [tx, tz];
+      }
+    }
+    return null;
+  }
+  WORLD.findFreeSpotNear = findFreeSpotNear;
+
   // Axis-separated movement: returns final (x,z) after sliding along walls.
   function moveWithCollision(fromX, fromZ, dx, dz, r, heightY) {
     let nx = fromX + dx;
@@ -533,17 +551,21 @@
       return;
     }
 
-    // --- Look input ---
+    // --- Look input (with stick deadzone) ---
     const mouseSens = 0.0022;
     const stickSens = 2.6;
+    const DEAD = 0.12;
+    const lookX = Math.abs(Input.look.x) < DEAD ? 0 : Input.look.x;
+    const lookY = Math.abs(Input.look.y) < DEAD ? 0 : Input.look.y;
     p.yaw   -= Input.mouseDX * mouseSens;
     p.pitch -= Input.mouseDY * mouseSens;
-    p.yaw   -= Input.look.x * stickSens * dt;
-    p.pitch -= Input.look.y * stickSens * dt;
+    p.yaw   -= lookX * stickSens * dt;
+    p.pitch -= lookY * stickSens * dt;
     p.pitch = clamp(p.pitch, -1.1, 0.9);
 
     // --- Move input ---
-    let mx = Input.move.x, my = Input.move.y;
+    let mx = Math.abs(Input.move.x) < DEAD ? 0 : Input.move.x;
+    let my = Math.abs(Input.move.y) < DEAD ? 0 : Input.move.y;
     if (!state.touchMode) {
       const [kx, ky] = readKeyboardMove();
       mx += kx; my += ky;
@@ -567,6 +589,13 @@
     const h = crouching ? p.crouchHeight : p.standHeight;
     const [nx, nz] = moveWithCollision(p.pos.x, p.pos.z, vx * dt, vz * dt, p.radius, h * 0.5);
     p.pos.x = nx; p.pos.z = nz;
+
+    // Safety eject: if we somehow end up embedded in an obstacle, search a
+    // small ring for a clear spot so the player never gets permanently stuck.
+    if (collidesCircle(p.pos.x, p.pos.z, p.radius, h * 0.5)) {
+      const safe = findFreeSpotNear(p.pos.x, p.pos.z, p.radius + 0.1, h * 0.5);
+      if (safe) { p.pos.x = safe[0]; p.pos.z = safe[1]; }
+    }
 
     // Jump / gravity (simple).
     if (Input.jumpPressed && p.onGround && !crouching) {
