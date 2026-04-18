@@ -13,7 +13,14 @@
 <div id="scene-root"></div>
 
 <div id="hud" class="hidden">
-  <div id="crosshair"><span class="cx-dot"></span></div>
+  <div id="crosshair">
+    <span class="cx-dot"></span>
+    <div id="hitmarker">
+      <span class="hm nw"></span><span class="hm ne"></span>
+      <span class="hm sw"></span><span class="hm se"></span>
+    </div>
+  </div>
+  <div id="killfeed"></div>
   <div id="stats">
     <div class="stat" id="health-row">
       <span class="lbl">HP</span>

@@ -916,7 +916,8 @@
         if (o.isMesh && o.material && o.material.emissive) o.material.emissive.setRGB(0, 0, 0);
       });
     }, 80);
-    if (bot.hp <= 0) {
+    const killed = bot.hp <= 0;
+    if (killed) {
       bot.alive = false;
       bot.deathAt = now();
       bot.group.rotation.z = Math.PI / 2;
@@ -924,8 +925,43 @@
       state.kills++;
       flashMessage('HOSTILE DOWN');
     }
+    if (source === 'you') {
+      triggerHitmarker(killed);
+      if (killed) addKillFeed('You', bot.name || 'Hostile');
+    }
   }
   WORLD.damageBot = damageBot;
+
+  // ---------------- Hit marker + kill feed ----------------
+  let _hitmarkerTimer = null;
+  function triggerHitmarker(kill) {
+    const el = document.getElementById('hitmarker');
+    if (!el) return;
+    el.classList.remove('show', 'kill');
+    // Force reflow so re-adding the class restarts the fade.
+    void el.offsetWidth;
+    el.classList.add('show');
+    if (kill) el.classList.add('kill');
+    clearTimeout(_hitmarkerTimer);
+    _hitmarkerTimer = setTimeout(() => el.classList.remove('show', 'kill'),
+      kill ? 280 : 140);
+  }
+
+  function addKillFeed(killer, target) {
+    const feed = document.getElementById('killfeed');
+    if (!feed) return;
+    const row = document.createElement('div');
+    row.className = 'kf-entry';
+    row.innerHTML = '<b>' + killer + '</b> &rarr; <span class="target">' +
+      target + '</span>';
+    feed.appendChild(row);
+    // Trigger entry animation next frame.
+    requestAnimationFrame(() => row.classList.add('show'));
+    setTimeout(() => { row.classList.remove('show'); }, 3800);
+    setTimeout(() => { if (row.parentNode) row.parentNode.removeChild(row); }, 4200);
+    // Cap the feed to 5 rows.
+    while (feed.children.length > 5) feed.removeChild(feed.firstChild);
+  }
 
   function updateCameraFPS(dt) {
     const p = state.player;

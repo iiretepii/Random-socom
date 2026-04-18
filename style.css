@@ -99,6 +99,50 @@ button:active { transform: translateY(2px); }
   background: #fff; border-radius: 50%;
 }
 
+/* Hit marker: four diagonal ticks that flash when a shot lands on a bot. */
+#hitmarker {
+  position: absolute; left: 50%; top: 50%;
+  width: 42px; height: 42px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+  pointer-events: none;
+}
+#hitmarker.show { opacity: 1; }
+#hitmarker.kill .hm { background: #ff5252; box-shadow: 0 0 8px rgba(255, 60, 60, 0.8); }
+.hm {
+  position: absolute; width: 10px; height: 2px;
+  background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.9);
+  transform-origin: center;
+}
+.hm.nw { left: 0;   top: 4;  transform: rotate(45deg); }
+.hm.ne { right: 0;  top: 4;  transform: rotate(-45deg); }
+.hm.sw { left: 0;   bottom: 4; transform: rotate(-45deg); }
+.hm.se { right: 0;  bottom: 4; transform: rotate(45deg); }
+
+/* Kill feed: stack of recent kills in the top-right under the minimap. */
+#killfeed {
+  position: absolute;
+  top: 200px; right: 14px;
+  width: 220px;
+  display: flex; flex-direction: column; gap: 4px;
+  pointer-events: none;
+}
+.kf-entry {
+  background: rgba(0, 0, 0, 0.55);
+  border-left: 3px solid #ffbb55;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #f0f6ff;
+  letter-spacing: 1px;
+  opacity: 0;
+  transform: translateX(16px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.kf-entry.show { opacity: 1; transform: translateX(0); }
+.kf-entry b { color: #ffcc55; }
+.kf-entry .target { color: #ff8888; }
+
 #stats {
   position: absolute; top: 14px; left: 14px;
   padding: 10px 14px;
