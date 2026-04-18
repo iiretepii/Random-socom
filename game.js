@@ -53,6 +53,145 @@
   );
   camera.position.set(0, 3, 8);
 
+  // ---------------- Audio (WebAudio synth, no external assets) ----------------
+  const Audio = {
+    ctx: null, master: null,
+    init() {
+      if (this.ctx) return;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      this.ctx = new Ctx();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.55;
+      this.master.connect(this.ctx.destination);
+    },
+    resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+    _noiseBuffer(dur) {
+      const n = Math.floor(this.ctx.sampleRate * dur);
+      const b = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return b;
+    },
+    _out(pan) {
+      // Optional stereo pan; falls back to a pass-through gain if unsupported.
+      if (this.ctx.createStereoPanner) {
+        const p = this.ctx.createStereoPanner();
+        p.pan.value = clamp(pan || 0, -1, 1);
+        p.connect(this.master);
+        return p;
+      }
+      const g = this.ctx.createGain();
+      g.connect(this.master);
+      return g;
+    },
+    gunshot(volume, muffle, pan) {
+      if (!this.ctx) return;
+      volume = volume == null ? 1 : volume;
+      const t = this.ctx.currentTime;
+      const out = this._out(pan);
+      // Noise burst → lowpass sweep for the crack.
+      const src = this.ctx.createBufferSource();
+      src.buffer = this._noiseBuffer(0.22);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.9 * volume, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(muffle ? 1200 : 3800, t);
+      lp.frequency.exponentialRampToValueAtTime(muffle ? 250 : 500, t + 0.15);
+      src.connect(lp); lp.connect(g); g.connect(out);
+      src.start(t); src.stop(t + 0.25);
+      // Low-frequency punch for body.
+      const osc = this.ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(160, t);
+      osc.frequency.exponentialRampToValueAtTime(55, t + 0.09);
+      const g2 = this.ctx.createGain();
+      g2.gain.setValueAtTime(0.45 * volume, t);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      osc.connect(g2); g2.connect(out);
+      osc.start(t); osc.stop(t + 0.12);
+    },
+    hitConfirm(kill) {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const out = this._out(0);
+      const freqs = kill ? [880, 1320, 1760] : [1500];
+      freqs.forEach((f, i) => {
+        const o = this.ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.value = f;
+        const g = this.ctx.createGain();
+        const st = t + i * 0.055;
+        g.gain.setValueAtTime(kill ? 0.2 : 0.14, st);
+        g.gain.exponentialRampToValueAtTime(0.0001, st + 0.1);
+        o.connect(g); g.connect(out);
+        o.start(st); o.stop(st + 0.12);
+      });
+    },
+    reload() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const out = this._out(0);
+      [0.02, 0.32, 0.85, 1.25].forEach((offset, i) => {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this._noiseBuffer(0.05);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.28, t + offset);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.05);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.Q.value = 4;
+        bp.frequency.value = 1100 + i * 450;
+        src.connect(bp); bp.connect(g); g.connect(out);
+        src.start(t + offset); src.stop(t + offset + 0.06);
+      });
+    },
+    damage() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const out = this._out(0);
+      const o = this.ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(220, t);
+      o.frequency.exponentialRampToValueAtTime(45, t + 0.3);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.35, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g); g.connect(out);
+      o.start(t); o.stop(t + 0.35);
+    },
+    emptyClick() {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const out = this._out(0);
+      const src = this.ctx.createBufferSource();
+      src.buffer = this._noiseBuffer(0.02);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 2200;
+      src.connect(hp); hp.connect(g); g.connect(out);
+      src.start(t); src.stop(t + 0.03);
+    },
+    // Distance-attenuated enemy gunshot with simple stereo pan.
+    enemyGunshot(worldPos) {
+      if (!this.ctx) return;
+      const p = state.player;
+      if (!p) return;
+      const dx = worldPos.x - p.pos.x;
+      const dz = worldPos.z - p.pos.z;
+      const dist = Math.hypot(dx, dz);
+      const vol = clamp(28 / (28 + dist * dist * 0.018), 0, 1) * 0.9;
+      // Pan: project offset onto player's right vector (cos(yaw), -sin(yaw)).
+      const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
+      const right = dx * cy + dz * -sy;
+      const pan = clamp(right / Math.max(1.5, dist), -1, 1);
+      this.gunshot(vol, dist > 18, pan);
+    },
+  };
+
   // Lighting
   scene.add(new THREE.HemisphereLight(0xb8d0ff, 0x2a2f38, 0.85));
   const sun = new THREE.DirectionalLight(0xffd9a0, 0.9);
@@ -583,6 +722,7 @@
     const p = state.player;
     if (!p.alive) return;
     p.hp -= amount;
+    Audio.damage();
     const vig = document.getElementById('damage-vignette');
     if (vig) {
       vig.style.boxShadow = 'inset 0 0 140px 30px rgba(220, 40, 40, 0.55)';
@@ -597,6 +737,7 @@
     if (p.reloading || p.mag >= 30 || p.reserve <= 0) return;
     p.reloading = true;
     p.reloadEnd = now() + 1.8;
+    Audio.reload();
     flashMessage('RELOADING');
   }
 
@@ -849,9 +990,14 @@
   function fireOnce() {
     const p = state.player;
     if (p.reloading || p.mag <= 0) {
-      if (p.mag <= 0 && !p.reloading) { startReload(); flashMessage('RELOAD'); }
+      if (p.mag <= 0 && !p.reloading) {
+        Audio.emptyClick();
+        startReload();
+        flashMessage('RELOAD');
+      }
       return;
     }
+    Audio.gunshot(1.0, false, 0);
     p.mag--;
     p.fireCooldown = p.fireRate;
     p.recoil = Math.min(1.2, p.recoil + 0.25);
@@ -927,6 +1073,7 @@
     }
     if (source === 'you') {
       triggerHitmarker(killed);
+      Audio.hitConfirm(killed);
       if (killed) addKillFeed('You', bot.name || 'Hostile');
     }
   }
@@ -1123,6 +1270,7 @@
     const p = state.player;
     if (!p.alive) return;
     bot.lastFireAt = now();
+    Audio.enemyGunshot(bot.pos);
 
     // Origin at bot's chest, aim toward player with accuracy-based spread.
     const origin = V3(bot.pos.x, bot.pos.y + 1.45, bot.pos.z);
@@ -1427,6 +1575,8 @@
 
   // ---------------- UI wiring ----------------
   function startGame() {
+    Audio.init();
+    Audio.resume();
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('death-screen').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
