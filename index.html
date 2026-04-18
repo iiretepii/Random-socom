@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<title>Operation Browser Strike — SOCOM-style Ops</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="scene-root"></div>
+
+<div id="hud" class="hidden">
+  <div id="crosshair"><span class="cx-dot"></span></div>
+  <div id="stats">
+    <div class="stat" id="health-row">
+      <span class="lbl">HP</span>
+      <span class="bar"><span id="health-bar" class="fill hp"></span></span>
+      <span class="num" id="health-num">100</span>
+    </div>
+    <div class="stat" id="ammo-row">
+      <span class="lbl">AMMO</span>
+      <span class="num" id="ammo-num">30 / 120</span>
+    </div>
+    <div class="stat" id="score-row">
+      <span class="lbl">KILLS</span>
+      <span class="num" id="score-num">0</span>
+      <span class="lbl" style="margin-left:12px">KIA</span>
+      <span class="num" id="death-num">0</span>
+    </div>
+  </div>
+  <div id="minimap">
+    <canvas id="minimap-canvas" width="170" height="170"></canvas>
+  </div>
+  <div id="message"></div>
+  <div id="hit-flash"></div>
+  <div id="damage-vignette"></div>
+
+  <div id="joy-left" class="joystick"><div class="knob"></div></div>
+  <div id="joy-right" class="joystick"><div class="knob"></div></div>
+
+  <div id="btn-fire" class="btn fire">FIRE</div>
+  <div id="btn-reload" class="btn">RELOAD</div>
+  <div id="btn-crouch" class="btn">CROUCH</div>
+  <div id="btn-jump" class="btn">JUMP</div>
+  <div id="btn-sprint" class="btn">SPRINT</div>
+</div>
+
+<div id="start-screen">
+  <div class="panel">
+    <h1>OPERATION<br/><span class="accent">BROWSER&nbsp;STRIKE</span></h1>
+    <p class="tag">A SOCOM-2 inspired tactical shooter</p>
+    <div class="controls">
+      <div class="col">
+        <h3>Desktop</h3>
+        <ul>
+          <li><b>WASD</b> move</li>
+          <li><b>Mouse</b> aim (click canvas to lock)</li>
+          <li><b>Click</b> fire</li>
+          <li><b>R</b> reload</li>
+          <li><b>Shift</b> sprint &middot; <b>Ctrl/C</b> crouch</li>
+          <li><b>Space</b> jump &middot; <b>Esc</b> release mouse</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>iPad / Touch</h3>
+        <ul>
+          <li><b>Left stick</b> move</li>
+          <li><b>Right stick</b> aim</li>
+          <li><b>FIRE</b> tap &amp; hold</li>
+          <li><b>RELOAD / CROUCH / JUMP / SPRINT</b></li>
+          <li>Rotate iPad to landscape</li>
+        </ul>
+      </div>
+    </div>
+    <button id="start-btn">DEPLOY</button>
+    <p class="foot">Eliminate the hostiles. They can hear and see — use cover.</p>
+  </div>
+</div>
+
+<div id="death-screen" class="hidden">
+  <div class="panel small">
+    <h2>YOU WERE TAKEN OUT</h2>
+    <p id="death-stats"></p>
+    <button id="respawn-btn">RESPAWN</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
