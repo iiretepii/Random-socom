@@ -42,11 +42,12 @@
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, state.touchMode ? 1.5 : 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setClearColor(0x0f1622);
+  renderer.setClearColor(0xb8a98a); // matches horizon, only seen if sky fails
   document.getElementById('scene-root').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x0f1622, 45, 160);
+  // Warm-grey haze in the distance so buildings fade into the horizon band.
+  scene.fog = new THREE.Fog(0xb8a98a, 55, 220);
 
   const camera = new THREE.PerspectiveCamera(
     72, window.innerWidth / window.innerHeight, 0.1, 400
@@ -192,11 +193,70 @@
     },
   };
 
-  // Lighting
-  scene.add(new THREE.HemisphereLight(0xb8d0ff, 0x2a2f38, 0.85));
-  const sun = new THREE.DirectionalLight(0xffd9a0, 0.9);
-  sun.position.set(40, 70, 20);
+  // Lighting — tuned to match the sky's sun direction/color so shading
+  // reads correctly at any camera angle.
+  const SUN_DIR = new THREE.Vector3(0.48, 0.84, 0.24).normalize();
+  scene.add(new THREE.HemisphereLight(0xbcd4f0, 0x3a352e, 0.75));
+  const sun = new THREE.DirectionalLight(0xfff0c8, 0.95);
+  sun.position.copy(SUN_DIR).multiplyScalar(80);
   scene.add(sun);
+
+  // ---------------- Sky dome ----------------
+  // Large inverted sphere with a custom shader: zenith/horizon gradient,
+  // sun disc + halo, slight dithering to kill banding. Rendered first
+  // (renderOrder -1) and re-centered on the camera each frame so the
+  // horizon never shifts as the player moves.
+  function buildSky() {
+    const geo = new THREE.SphereGeometry(260, 48, 32);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uHorizon:  { value: new THREE.Color(0xd8c79c) },
+        uZenith:   { value: new THREE.Color(0x3b6ea0) },
+        uGround:   { value: new THREE.Color(0x1a1d24) },
+        uSunDir:   { value: SUN_DIR.clone() },
+        uSunColor: { value: new THREE.Color(0xfff4d2) },
+      },
+      vertexShader: [
+        'varying vec3 vDir;',
+        'void main() {',
+        '  vDir = normalize(position);',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}',
+      ].join('\n'),
+      fragmentShader: [
+        'varying vec3 vDir;',
+        'uniform vec3 uHorizon;',
+        'uniform vec3 uZenith;',
+        'uniform vec3 uGround;',
+        'uniform vec3 uSunDir;',
+        'uniform vec3 uSunColor;',
+        'void main() {',
+        '  vec3 d = normalize(vDir);',
+        '  vec3 sky;',
+        '  if (d.y < 0.0) {',
+        '    sky = mix(uHorizon, uGround, clamp(-d.y * 2.2, 0.0, 1.0));',
+        '  } else {',
+        '    float t = pow(clamp(d.y, 0.0, 1.0), 0.55);',
+        '    sky = mix(uHorizon, uZenith, t);',
+        '  }',
+        '  float sd = max(dot(d, normalize(uSunDir)), 0.0);',
+        '  float disc = smoothstep(0.9988, 0.9999, sd);',
+        '  float halo = pow(sd, 180.0) * 0.45 + pow(sd, 20.0) * 0.06;',
+        '  sky += uSunColor * (disc * 3.0 + halo);',
+        '  // Cheap hash dither to hide 8-bit banding.',
+        '  sky += (fract(sin(dot(d.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;',
+        '  gl_FragColor = vec4(sky, 1.0);',
+        '}',
+      ].join('\n'),
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = -1;
+    scene.add(mesh);
+    WORLD.sky = mesh;
+  }
+  buildSky();
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1569,6 +1629,9 @@
     updateEffects(dt);
     updateCamera(dt);
     updateHUD();
+
+    // Keep the sky dome centered on the camera so the horizon is stable.
+    if (WORLD.sky) WORLD.sky.position.copy(camera.position);
 
     renderer.render(scene, camera);
   }
