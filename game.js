@@ -1293,13 +1293,13 @@
     Audio.gunshot(1.0, false, 0);
     p.mag--;
     p.fireCooldown = p.fireRate;
-    p.recoil = Math.min(1.2, p.recoil + 0.25);
-    p.pitch += rand(0.005, 0.02); // kick up slightly
+    p.recoil = Math.min(0.55, p.recoil + 0.08);
+    p.pitch += rand(0.001, 0.005); // gentle climb on sustained fire
 
     // Hitscan from camera so what you see is what you hit.
     const aim = crosshairAim();
     // Add minor spread from recoil.
-    const spread = 0.004 + p.recoil * 0.01;
+    const spread = 0.003 + p.recoil * 0.005;
     const dir = aim.dir.clone();
     dir.x += rand(-spread, spread);
     dir.y += rand(-spread, spread);
@@ -1318,7 +1318,7 @@
     spawnTracer(muzzle, endPt, 0xfff0b0);
 
     // Viewmodel kick + muzzle flash.
-    p.vmRecoil = Math.min(1.2, p.vmRecoil + 0.9);
+    p.vmRecoil = Math.min(0.6, p.vmRecoil + 0.35);
     if (p.vmFlash) { p.vmFlash.visible = true; p.vmFlash.material.opacity = 1; }
     if (p.vmFlashSpike) { p.vmFlashSpike.visible = true; p.vmFlashSpike.material.opacity = 0.9; }
 
@@ -1410,7 +1410,7 @@
     const eyeY = p.pos.y + (crouching ? 1.1 : 1.65);
     camera.position.set(p.pos.x, eyeY, p.pos.z);
 
-    const pitch = p.pitch - p.recoil * 0.35;
+    const pitch = p.pitch - p.recoil * 0.12;
     const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
     const cp = Math.cos(pitch), sp = Math.sin(pitch);
     camera.lookAt(
