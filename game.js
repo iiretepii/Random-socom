@@ -435,70 +435,303 @@
   }
 
   function buildMap() {
-    const S = WORLD.size;
+    // Interior half-size (meters). The playable floor spans [-S, S] on both axes.
+    const S = 36;
+    WORLD.size = S;
 
-    // Ground
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(S * 2, S * 2, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0x394355, roughness: 0.97 })
+    // ---- Floor: dark oak parquet ----
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(S * 2, S * 2),
+      new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: 0.92 })
     );
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
 
-    // Subtle asphalt grid lines
-    const grid = new THREE.GridHelper(S * 2, 36, 0x4a5a74, 0x2d3848);
-    grid.position.y = 0.015;
-    grid.material.transparent = true;
-    grid.material.opacity = 0.5;
-    scene.add(grid);
+    // Red runner strips along the central cross corridor.
+    const carpetMat = new THREE.MeshStandardMaterial({ color: 0x6a1e1e, roughness: 0.95 });
+    const carpetN = new THREE.Mesh(new THREE.PlaneGeometry(4.5, S * 2 - 2), carpetMat);
+    carpetN.rotation.x = -Math.PI / 2;
+    carpetN.position.y = 0.02;
+    scene.add(carpetN);
+    const carpetE = new THREE.Mesh(new THREE.PlaneGeometry(S * 2 - 2, 4.5), carpetMat);
+    carpetE.rotation.x = -Math.PI / 2;
+    carpetE.position.y = 0.02;
+    scene.add(carpetE);
 
-    // Perimeter walls (keeps player/bots in the arena)
-    const WH = 6, WT = 2;
-    addBox(0,  S, S * 2, WH, WT, 0x2a3340);
-    addBox(0, -S, S * 2, WH, WT, 0x2a3340);
-    addBox( S, 0, WT, WH, S * 2, 0x2a3340);
-    addBox(-S, 0, WT, WH, S * 2, 0x2a3340);
+    // ---- Ceiling ----
+    const ceiling = new THREE.Mesh(
+      new THREE.PlaneGeometry(S * 2, S * 2),
+      new THREE.MeshStandardMaterial({ color: 0x241d16, roughness: 0.95 })
+    );
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = 5.2;
+    scene.add(ceiling);
 
-    // Central plaza building (big, with corner offices)
-    addBox( 0,  0,  14, 8, 14, 0x6a5540);
-    addBox(-18, 14, 10, 7, 10, 0x5a4a38);
-    addBox( 20, -18, 12, 9, 9,  0x5a4a38);
-    addBox(-28, -24, 9, 6, 16, 0x6a5540);
-    addBox( 30,  22, 16, 7, 8,  0x6a5540);
-
-    // Long warehouse walls (create sightline corridors)
-    addBox(-10, -40, 30, 5, 2, 0x4a5264);
-    addBox( 14,  36, 28, 5, 2, 0x4a5264);
-    addBox(-42,  10, 2, 5, 22, 0x4a5264);
-    addBox( 42, -10, 2, 5, 26, 0x4a5264);
-
-    // Low cover: crates, concrete barriers (waist-height)
-    const lowColors = [0x8a6a3c, 0x6a6a6a, 0x7a5a35, 0x556677];
-    const coverSpots = [
-      [-6, -8], [6, -8], [-8, 6], [8, 8], [-22, -8], [22, -8],
-      [-14, 22], [14, -22], [-30, 2], [30, 2], [-4, 30], [4, -30],
-      [-36, 26], [36, 26], [-26, -36], [26, -36], [0, 40], [0, -44],
-      [-14, -14], [14, 14], [-20, 32], [22, 32],
-    ];
-    for (const [cx, cz] of coverSpots) {
-      const w = rand(1.6, 3.2), d = rand(1.6, 3.2), h = rand(1.0, 1.5);
-      const color = lowColors[irand(0, lowColors.length)];
-      const obs = addBox(cx, cz, w, h, d, color, 0.9);
-      obs.blocksSight = false; // can shoot over when standing
+    // Ceiling trim beams (cosmetic, non-colliding).
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0x1a140e, roughness: 0.9 });
+    for (let i = -2; i <= 2; i++) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(S * 2, 0.25, 0.3), beamMat);
+      beam.position.set(0, 5.05, i * 12);
+      scene.add(beam);
     }
 
-    // Decorative pillars (full-height, small footprint)
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 2;
-      const r = 46;
-      addBox(Math.cos(ang) * r, Math.sin(ang) * r, 2, 7, 2, 0x3a4252);
+    // ---- Wood paneling colors ----
+    const WOOD_DARK  = 0x3a2616;
+    const WOOD_MID   = 0x5a3d24;
+    const PLASTER    = 0x8c7a5c;
+    const wallH = 5.0;
+    const wallT = 0.6;
+
+    // Outer walls (full perimeter, no gaps; windows are visual only).
+    addBox(0,  S, S * 2, wallH, wallT, WOOD_MID);
+    addBox(0, -S, S * 2, wallH, wallT, WOOD_MID);
+    addBox( S, 0, wallT, wallH, S * 2, WOOD_MID);
+    addBox(-S, 0, wallT, wallH, S * 2, WOOD_MID);
+
+    // Wainscoting strip: a slightly-proud darker panel along each outer wall base.
+    function wainscot(x, z, w, d) {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 1.6, d),
+        new THREE.MeshStandardMaterial({ color: WOOD_DARK, roughness: 0.9 })
+      );
+      m.position.set(x, 0.8, z);
+      scene.add(m);
+    }
+    wainscot(0,  S - 0.35, S * 2 - 1.2, 0.1);
+    wainscot(0, -S + 0.35, S * 2 - 1.2, 0.1);
+    wainscot( S - 0.35, 0, 0.1, S * 2 - 1.2);
+    wainscot(-S + 0.35, 0, 0.1, S * 2 - 1.2);
+
+    // ---- Windows: warm emissive panels glued to the inside of outer walls ----
+    const winMat = new THREE.MeshStandardMaterial({
+      color: 0xffe9b0, emissive: 0xffdc8c, emissiveIntensity: 1.4, roughness: 0.3
+    });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 0.8 });
+    function addWindow(x, y, z, faceRotY) {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.2), winMat);
+      w.position.set(x, y, z);
+      w.rotation.y = faceRotY;
+      scene.add(w);
+      // Cross mullion.
+      const v = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.2, 0.08), frameMat);
+      const h = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.12, 0.08), frameMat);
+      v.position.copy(w.position); h.position.copy(w.position);
+      v.rotation.y = faceRotY; h.rotation.y = faceRotY;
+      // Nudge frame slightly forward along wall normal.
+      const nx = Math.sin(faceRotY) * 0.05, nz = Math.cos(faceRotY) * 0.05;
+      v.position.x += nx; v.position.z += nz;
+      h.position.x += nx; h.position.z += nz;
+      scene.add(v); scene.add(h);
+    }
+    const winY = 3.1;
+    for (const z of [-22, -8, 8, 22]) {
+      addWindow(-S + wallT / 2 + 0.03, winY, z, Math.PI / 2);
+      addWindow( S - wallT / 2 - 0.03, winY, z, -Math.PI / 2);
+    }
+    for (const x of [-22, -8, 8, 22]) {
+      addWindow(x, winY, -S + wallT / 2 + 0.03, 0);
+      addWindow(x, winY,  S - wallT / 2 - 0.03, Math.PI);
     }
 
-    // Spawn points spread around the map
+    // Narrow light shafts from each window along the floor (cosmetic planes).
+    const shaftMat = new THREE.MeshBasicMaterial({
+      color: 0xffe3a0, transparent: true, opacity: 0.12,
+    });
+    function addShaft(x, z, length, rotY) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2, length), shaftMat);
+      m.rotation.x = -Math.PI / 2;
+      m.rotation.z = rotY;
+      m.position.set(x, 0.04, z);
+      scene.add(m);
+    }
+    for (const z of [-22, -8, 8, 22]) {
+      addShaft(-S + 6, z, 10, 0);
+      addShaft( S - 6, z, 10, 0);
+    }
+    for (const x of [-22, -8, 8, 22]) {
+      addShaft(x, -S + 6, 10, Math.PI / 2);
+      addShaft(x,  S - 6, 10, Math.PI / 2);
+    }
+
+    // ---- Interior walls forming four rooms + central cross corridor ----
+    // Doorways are 6 wide. Corridor is 10 wide (from -5 to 5 on each axis).
+    // South-half vertical divider: z from -S+0.3 to -5 minus a doorway at z=-22..-16.
+    function vDiv(x, z0, z1, gaps) {
+      // gaps: array of [gzStart, gzEnd]
+      let segs = [[z0, z1]];
+      for (const [a, b] of gaps || []) {
+        const next = [];
+        for (const [s, e] of segs) {
+          if (b < s || a > e) { next.push([s, e]); continue; }
+          if (a > s) next.push([s, a]);
+          if (b < e) next.push([b, e]);
+        }
+        segs = next;
+      }
+      for (const [s, e] of segs) {
+        const cz = (s + e) / 2, len = e - s;
+        if (len > 0.4) addBox(x, cz, wallT, wallH, len, PLASTER);
+      }
+    }
+    function hDiv(z, x0, x1, gaps) {
+      let segs = [[x0, x1]];
+      for (const [a, b] of gaps || []) {
+        const next = [];
+        for (const [s, e] of segs) {
+          if (b < s || a > e) { next.push([s, e]); continue; }
+          if (a > s) next.push([s, a]);
+          if (b < e) next.push([b, e]);
+        }
+        segs = next;
+      }
+      for (const [s, e] of segs) {
+        const cx = (s + e) / 2, len = e - s;
+        if (len > 0.4) addBox(cx, z, len, wallH, wallT, PLASTER);
+      }
+    }
+    // Cross-corridor walls: stop 5 units short of center on each side.
+    vDiv( 0, -S + 0.3,  -5, [[-22, -18]]);   // SW/SE divider, doorway into S corridor
+    vDiv( 0,  5,  S - 0.3, [[ 18,  22]]);    // NW/NE divider, doorway into N corridor
+    hDiv( 0, -S + 0.3, -5, [[-22, -18]]);    // NW/SW divider, doorway into W corridor
+    hDiv( 0,  5,  S - 0.3, [[ 18,  22]]);    // NE/SE divider, doorway into E corridor
+
+    // ---- Furniture ----
+    const SHELF   = 0x2a1b0c;
+    const DESK    = 0x4a3216;
+    const CABINET = 0x5a5248;
+    const CHAIR   = 0x2a2a2a;
+
+    // Draw a bookshelf with colorful books on its front face.
+    function bookshelf(x, z, rotY, length) {
+      const body = addBox(x, z, rotY === 0 ? length : 0.55, 1.9, rotY === 0 ? 0.55 : length, SHELF, 0.9);
+      body.blocksSight = false;
+      // Books strip: thin emissive-free boxes of random colors on shelves at 0.5, 1.0, 1.5.
+      const palette = [0x8a3a2a, 0x8a7a2a, 0x2a6a3a, 0x2a4a7a, 0x6a2a6a, 0xb0a080, 0x7a4a20];
+      const facingX = rotY === 0 ? 0 : (rotY > 0 ? 1 : -1);
+      const facingZ = rotY === 0 ? 1 : 0;
+      const spanDir = rotY === 0 ? 'x' : 'z';
+      const spanLen = length;
+      for (let shelfY of [0.45, 1.0, 1.55]) {
+        const n = Math.floor(spanLen / 0.18);
+        for (let i = 0; i < n; i++) {
+          const t = (i + 0.5) / n - 0.5;
+          const bx = x + (spanDir === 'x' ? t * spanLen : facingX * 0.24);
+          const bz = z + (spanDir === 'z' ? t * spanLen : facingZ * 0.24);
+          const bh = rand(0.22, 0.34);
+          const bw = rand(0.1, 0.16);
+          const book = new THREE.Mesh(
+            new THREE.BoxGeometry(
+              spanDir === 'x' ? bw : 0.08,
+              bh,
+              spanDir === 'z' ? bw : 0.08
+            ),
+            new THREE.MeshStandardMaterial({
+              color: palette[irand(0, palette.length)], roughness: 0.8
+            })
+          );
+          book.position.set(bx, shelfY + bh / 2, bz);
+          scene.add(book);
+        }
+      }
+    }
+
+    // Desk with a chair tucked under.
+    function desk(x, z, rotY) {
+      const d = addBox(x, z, rotY ? 0.9 : 1.6, 0.95, rotY ? 1.6 : 0.9, DESK, 0.8);
+      d.blocksSight = false;
+      // Desk lamp (small emissive dome).
+      const lampMat = new THREE.MeshStandardMaterial({
+        color: 0xfff2c8, emissive: 0xffc266, emissiveIntensity: 1.3, roughness: 0.4
+      });
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), lampMat);
+      const lx = x + (rotY ? 0.3 : -0.55);
+      const lz = z + (rotY ? -0.55 : 0.3);
+      lamp.position.set(lx, 1.1, lz);
+      scene.add(lamp);
+      // Chair back.
+      const ch = new THREE.Mesh(
+        new THREE.BoxGeometry(rotY ? 0.15 : 0.55, 0.9, rotY ? 0.55 : 0.15),
+        new THREE.MeshStandardMaterial({ color: CHAIR, roughness: 0.9 })
+      );
+      ch.position.set(x + (rotY ? 0.9 : 0), 0.45, z + (rotY ? 0 : 0.9));
+      scene.add(ch);
+    }
+
+    // Filing cabinet: squat grey waist-high box.
+    function cabinet(x, z) {
+      const c = addBox(x, z, 0.9, 1.35, 0.6, CABINET, 0.7);
+      c.blocksSight = false;
+      // Drawer grooves (cosmetic).
+      for (let g = 0; g < 3; g++) {
+        const dr = new THREE.Mesh(
+          new THREE.BoxGeometry(0.8, 0.04, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0x2a2a2a })
+        );
+        dr.position.set(x, 0.35 + g * 0.32, z + 0.31);
+        scene.add(dr);
+      }
+    }
+
+    // Populate each quadrant room. Shelves go along OUTER walls only so they
+    // never block the interior doorways (which sit at +/- 20 on each axis).
+    // Freestanding furniture lives well inside the rooms.
+    // NW room (x<0, z<0)
+    bookshelf(-28, -S + 1.5, 0, 12);            // along north wall, left half
+    bookshelf(-S + 1.5, -28, Math.PI / 2, 12);  // along west wall, top half
+    bookshelf(-10, -S + 1.5, 0, 8);             // along north wall, right half
+    desk(-24, -12, false);
+    cabinet(-10, -10);
+    cabinet(-28, -10);
+
+    // NE room (x>0, z<0)
+    bookshelf(28, -S + 1.5, 0, 12);
+    bookshelf( S - 1.5, -28, Math.PI / 2, 12);
+    bookshelf(10, -S + 1.5, 0, 8);
+    desk(24, -12, true);
+    cabinet(10, -10);
+    cabinet(28, -10);
+
+    // SW room (x<0, z>0)
+    bookshelf(-28, S - 1.5, 0, 12);
+    bookshelf(-S + 1.5, 28, Math.PI / 2, 12);
+    bookshelf(-10, S - 1.5, 0, 8);
+    desk(-24, 12, false);
+    cabinet(-10, 10);
+    cabinet(-28, 10);
+
+    // SE room
+    bookshelf(28, S - 1.5, 0, 12);
+    bookshelf( S - 1.5, 28, Math.PI / 2, 12);
+    bookshelf(10, S - 1.5, 0, 8);
+    desk(24, 12, true);
+    cabinet(10, 10);
+    cabinet(28, 10);
+
+    // Central atrium: a single long reading table along the east-west axis.
+    function readingTable(x, z, rotY) {
+      const t = addBox(x, z, rotY ? 1.3 : 4.6, 0.85, rotY ? 4.6 : 1.3, DESK, 0.8);
+      t.blocksSight = false;
+    }
+    readingTable(0, 0, false);
+
+    // ---- Interior lighting ----
+    // Warm point lights per room for the archive feel.
+    function roomLight(x, z, intensity) {
+      const l = new THREE.PointLight(0xffd89a, intensity || 0.9, 30, 2);
+      l.position.set(x, 4.4, z);
+      scene.add(l);
+    }
+    roomLight(-18, -18, 0.9);
+    roomLight( 18, -18, 0.9);
+    roomLight(-18,  18, 0.9);
+    roomLight( 18,  18, 0.9);
+    roomLight(0, 0, 1.1);
+
+    // ---- Spawn points: one in each room + central ----
     const spawns = [
-      [0, -36], [36, 0], [-36, 0], [0, 36],
-      [-26, -26], [26, 26], [-26, 26], [26, -26],
-      [12, -12], [-12, 12],
+      [-24, -24], [24, -24], [-24, 24], [24, 24],   // deep room corners
+      [-22, -10], [22, -10], [-22, 10], [22, 10],   // room interiors near doorways
+      [-10, -22], [10, -22], [-10, 22], [10, 22],
     ];
     for (const [x, z] of spawns) WORLD.spawnPoints.push(V3(x, 0, z));
     filterSpawnPoints();
