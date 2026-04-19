@@ -434,6 +434,60 @@
     return obs;
   }
 
+  // Build a rounded-rectangle cross-section, extrude it vertically, and
+  // bevel the top/bottom caps so the mesh reads as a soft, slightly rounded
+  // box instead of a harsh cube. Used for furniture.
+  function roundedBoxGeometry(w, h, d, cornerR, bevel) {
+    const r = Math.max(0.005, Math.min(cornerR, Math.min(w, d) / 2 - 0.01));
+    const shape = new THREE.Shape();
+    shape.moveTo(-w / 2 + r, -d / 2);
+    shape.lineTo( w / 2 - r, -d / 2);
+    shape.quadraticCurveTo( w / 2, -d / 2,  w / 2, -d / 2 + r);
+    shape.lineTo( w / 2,  d / 2 - r);
+    shape.quadraticCurveTo( w / 2,  d / 2,  w / 2 - r,  d / 2);
+    shape.lineTo(-w / 2 + r,  d / 2);
+    shape.quadraticCurveTo(-w / 2,  d / 2, -w / 2,  d / 2 - r);
+    shape.lineTo(-w / 2, -d / 2 + r);
+    shape.quadraticCurveTo(-w / 2, -d / 2, -w / 2 + r, -d / 2);
+    const b = Math.min(bevel != null ? bevel : 0.05, h / 3, r);
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: h - b * 2,
+      bevelEnabled: true,
+      bevelSize: b,
+      bevelThickness: b,
+      bevelSegments: 2,
+      curveSegments: 6,
+      steps: 1,
+    });
+    // Shape is authored in XY; extruded along +Z. Rotate so extrusion is Y.
+    geo.rotateX(-Math.PI / 2);
+    geo.translate(0, b, 0); // lift so base sits at y=0 after the bevel
+    return geo;
+  }
+
+  // Like addBox but uses a rounded extruded mesh. Same AABB for collision/LOS.
+  function addRoundedBox(x, z, w, h, d, color, opts) {
+    opts = opts || {};
+    const geo = roundedBoxGeometry(w, h, d,
+      opts.radius != null ? opts.radius : 0.08,
+      opts.bevel  != null ? opts.bevel  : 0.04);
+    const mat = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: opts.roughness != null ? opts.roughness : 0.85,
+      metalness: opts.metalness != null ? opts.metalness : 0.0,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0, z);
+    scene.add(mesh);
+    const box = new THREE.Box3(
+      V3(x - w / 2, 0, z - d / 2),
+      V3(x + w / 2, h, z + d / 2)
+    );
+    const obs = { box, mesh, w, h, d, x, z, blocksBullet: true, blocksSight: h >= 1.6 };
+    WORLD.obstacles.push(obs);
+    return obs;
+  }
+
   function buildMap() {
     // Interior half-size (meters). The playable floor spans [-S, S] on both axes.
     const S = 36;
@@ -603,7 +657,10 @@
 
     // Draw a bookshelf with colorful books on its front face.
     function bookshelf(x, z, rotY, length) {
-      const body = addBox(x, z, rotY === 0 ? length : 0.55, 1.9, rotY === 0 ? 0.55 : length, SHELF, 0.9);
+      const bw = rotY === 0 ? length : 0.55;
+      const bd = rotY === 0 ? 0.55   : length;
+      const body = addRoundedBox(x, z, bw, 1.9, bd, SHELF,
+        { roughness: 0.9, radius: 0.06, bevel: 0.03 });
       body.blocksSight = false;
       // Books strip: thin emissive-free boxes of random colors on shelves at 0.5, 1.0, 1.5.
       const palette = [0x8a3a2a, 0x8a7a2a, 0x2a6a3a, 0x2a4a7a, 0x6a2a6a, 0xb0a080, 0x7a4a20];
@@ -637,38 +694,77 @@
 
     // Desk with a chair tucked under.
     function desk(x, z, rotY) {
-      const d = addBox(x, z, rotY ? 0.9 : 1.6, 0.95, rotY ? 1.6 : 0.9, DESK, 0.8);
+      const dw = rotY ? 0.9 : 1.6;
+      const dd = rotY ? 1.6 : 0.9;
+      const d = addRoundedBox(x, z, dw, 0.95, dd, DESK,
+        { roughness: 0.8, radius: 0.09, bevel: 0.05 });
       d.blocksSight = false;
-      // Desk lamp (small emissive dome).
+      // Desk lamp: rounded base + bulb dome.
+      const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.12, 0.05, 16),
+        new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6, metalness: 0.5 })
+      );
+      const neck = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.022, 0.22, 8),
+        new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.6, metalness: 0.5 })
+      );
       const lampMat = new THREE.MeshStandardMaterial({
         color: 0xfff2c8, emissive: 0xffc266, emissiveIntensity: 1.3, roughness: 0.4
       });
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), lampMat);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), lampMat);
       const lx = x + (rotY ? 0.3 : -0.55);
       const lz = z + (rotY ? -0.55 : 0.3);
-      lamp.position.set(lx, 1.1, lz);
-      scene.add(lamp);
-      // Chair back.
-      const ch = new THREE.Mesh(
-        new THREE.BoxGeometry(rotY ? 0.15 : 0.55, 0.9, rotY ? 0.55 : 0.15),
-        new THREE.MeshStandardMaterial({ color: CHAIR, roughness: 0.9 })
+      base.position.set(lx, 0.95 + 0.025, lz);
+      neck.position.set(lx, 0.95 + 0.16, lz);
+      bulb.position.set(lx, 0.95 + 0.32, lz);
+      scene.add(base); scene.add(neck); scene.add(bulb);
+
+      // Chair: rounded seat + back + cylindrical legs for a less boxy look.
+      const chairMat = new THREE.MeshStandardMaterial({ color: CHAIR, roughness: 0.9 });
+      const seat = new THREE.Mesh(roundedBoxGeometry(0.5, 0.1, 0.5, 0.06, 0.03), chairMat);
+      seat.position.set(x + (rotY ? 0.9 : 0), 0.45, z + (rotY ? 0 : 0.9));
+      scene.add(seat);
+      const back = new THREE.Mesh(roundedBoxGeometry(
+        rotY ? 0.12 : 0.5, 0.55, rotY ? 0.5 : 0.12, 0.05, 0.025), chairMat);
+      back.position.set(
+        seat.position.x + (rotY ? 0.23 : 0),
+        seat.position.y + 0.32,
+        seat.position.z + (rotY ? 0 : 0.23)
       );
-      ch.position.set(x + (rotY ? 0.9 : 0), 0.45, z + (rotY ? 0 : 0.9));
-      scene.add(ch);
+      scene.add(back);
+      for (let i = 0; i < 4; i++) {
+        const lx = (i & 1) ? 0.2 : -0.2;
+        const lz = (i & 2) ? 0.2 : -0.2;
+        const leg = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.028, 0.028, 0.45, 8),
+          new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7, metalness: 0.4 })
+        );
+        leg.position.set(seat.position.x + lx, 0.225, seat.position.z + lz);
+        scene.add(leg);
+      }
     }
 
-    // Filing cabinet: squat grey waist-high box.
+    // Filing cabinet: squat grey waist-high box with rounded edges.
     function cabinet(x, z) {
-      const c = addBox(x, z, 0.9, 1.35, 0.6, CABINET, 0.7);
+      const c = addRoundedBox(x, z, 0.9, 1.35, 0.6, CABINET,
+        { roughness: 0.55, metalness: 0.35, radius: 0.05, bevel: 0.03 });
       c.blocksSight = false;
-      // Drawer grooves (cosmetic).
+      // Drawer divider strips + a small cylindrical pull handle per drawer.
+      const handleMat = new THREE.MeshStandardMaterial({
+        color: 0xaaaaaa, roughness: 0.4, metalness: 0.6,
+      });
+      const grooveMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
       for (let g = 0; g < 3; g++) {
-        const dr = new THREE.Mesh(
-          new THREE.BoxGeometry(0.8, 0.04, 0.02),
-          new THREE.MeshStandardMaterial({ color: 0x2a2a2a })
-        );
-        dr.position.set(x, 0.35 + g * 0.32, z + 0.31);
+        const dr = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.03, 0.015), grooveMat);
+        dr.position.set(x, 0.35 + g * 0.32, z + 0.315);
         scene.add(dr);
+        const pull = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.015, 0.015, 0.14, 10),
+          handleMat
+        );
+        pull.rotation.z = Math.PI / 2;
+        pull.position.set(x, 0.5 + g * 0.32, z + 0.32);
+        scene.add(pull);
       }
     }
 
@@ -709,7 +805,10 @@
 
     // Central atrium: a single long reading table along the east-west axis.
     function readingTable(x, z, rotY) {
-      const t = addBox(x, z, rotY ? 1.3 : 4.6, 0.85, rotY ? 4.6 : 1.3, DESK, 0.8);
+      const tw = rotY ? 1.3 : 4.6;
+      const td = rotY ? 4.6 : 1.3;
+      const t = addRoundedBox(x, z, tw, 0.85, td, DESK,
+        { roughness: 0.75, radius: 0.12, bevel: 0.06 });
       t.blocksSight = false;
     }
     readingTable(0, 0, false);
