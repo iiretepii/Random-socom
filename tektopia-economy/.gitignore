@@ -1,0 +1,16 @@
+.gradle/
+build/
+out/
+run/
+classes/
+*.iml
+*.ipr
+*.iws
+.idea/
+eclipse/
+.classpath
+.project
+.settings/
+
+# TekTopia is closed source; don't commit its jar.
+libs/*.jar

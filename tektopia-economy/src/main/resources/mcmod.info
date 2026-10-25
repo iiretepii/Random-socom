@@ -1,0 +1,11 @@
+[{
+  "modid": "tekeco",
+  "name": "TekTopia Economy",
+  "description": "Adds a town treasury, villager wallets, daily wages and living costs to TekTopia villages.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "authorList": ["iiretepii"],
+  "dependencies": ["tektopia"],
+  "requiredMods": ["tektopia"],
+  "useDependencyInformation": true
+}]

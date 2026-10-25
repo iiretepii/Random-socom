@@ -1,0 +1,19 @@
+tekeco.wallet.info=%s has %s emeralds (last wage: %s).
+tekeco.wallet.unpaid=%s has %s emeralds and is not on the payroll.
+
+commands.tekeco.usage=/tekeco <balance|deposit <amount|all>|withdraw <amount>|report>
+commands.tekeco.novillage=You're not standing in a TekTopia village.
+commands.tekeco.notownhall=This village has no Town Hall, so it has no treasury yet.
+commands.tekeco.balance=%s treasury: %s emeralds.
+commands.tekeco.deposit.usage=/tekeco deposit <amount|all>
+commands.tekeco.deposit.notenough=You only have %s emeralds.
+commands.tekeco.deposit.done=Deposited %s emeralds into %s's treasury. Balance: %s.
+commands.tekeco.withdraw.usage=/tekeco withdraw <amount>
+commands.tekeco.withdraw.oponly=Only operators can withdraw from a treasury.
+commands.tekeco.withdraw.notenough=The treasury only holds %s emeralds.
+commands.tekeco.withdraw.done=Withdrew %s emeralds from %s's treasury. Balance: %s.
+commands.tekeco.report.header=== %s economy ==
+commands.tekeco.report.balance=Treasury: %s emeralds
+commands.tekeco.report.savings=Villager savings: %s emeralds across %s loaded villagers
+commands.tekeco.report.nopayday=No payday yet.
+commands.tekeco.report.payday=Last payday (%s days ago): paid %s emeralds to %s villagers, collected %s in rent and food. Unpaid: %s. Couldn't afford living costs: %s.

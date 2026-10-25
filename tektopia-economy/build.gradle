@@ -1,0 +1,70 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url = "https://maven.minecraftforge.net/" }
+    }
+    dependencies {
+        classpath "net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT"
+    }
+}
+
+apply plugin: "net.minecraftforge.gradle.forge"
+
+version = mod_version
+group = "tekeco"
+archivesBaseName = "tektopia-economy-${mc_version}"
+
+sourceCompatibility = targetCompatibility = "1.8"
+compileJava {
+    sourceCompatibility = targetCompatibility = "1.8"
+    options.encoding = "UTF-8"
+}
+
+minecraft {
+    version = "${mc_version}-${forge_version}"
+    runDir = "run"
+    mappings = mcp_mappings
+}
+
+// TekTopia is closed source and isn't on any Maven repository, so it is read from libs/.
+// See README.md. Its jar embeds CraftStudio, which TekTopia's entity classes implement,
+// so that jar is pulled out for the compile classpath.
+def tektopiaJar = file("libs/tektopia-${tektopia_version}.jar")
+if (!tektopiaJar.exists()) {
+    throw new GradleException("Missing ${tektopiaJar}. Download TekTopia ${tektopia_version} from CurseForge and put it in libs/ (see README.md).")
+}
+def tektopiaLibs = file("$buildDir/tektopia-libs")
+copy {
+    from(zipTree(tektopiaJar)) { include "META-INF/libraries/*.jar" }
+    into tektopiaLibs
+    eachFile { it.path = it.name }
+    includeEmptyDirs = false
+}
+
+dependencies {
+    // TekTopia is compiled against SRG names. That's fine for compiling: this mod only calls
+    // TekTopia's own (unobfuscated) methods. In the dev client, Forge remaps it at load time.
+    compileOnly files(tektopiaJar)
+    compileOnly fileTree(dir: tektopiaLibs, include: "*.jar")
+}
+
+// The dev client and server load TekTopia from run/mods.
+task installTektopia(type: Copy) {
+    from tektopiaJar
+    into "run/mods"
+}
+runClient.dependsOn installTektopia
+runServer.dependsOn installTektopia
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include "mcmod.info"
+        expand "version": project.version, "mcversion": project.minecraft.version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude "mcmod.info"
+    }
+}
